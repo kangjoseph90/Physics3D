@@ -326,7 +326,9 @@ int main() {
 	model.add_ball({ -3,-3,50 }, 30, 2); //오브젝트 추가
 	model.add_ball({ 1,5,17 }, 25, 1);
 	model.add_ball({ -30,50,60 }, 40, 3);
-
+	model.add_ball({ -50,30,49 }, 30, 2);
+	model.add_ball({ -70,20,-40 }, 40, 3);
+	model.add_ball({ 100,-55,-30 }, 60, 5);
 	while (true) {
 
 		clock_t start = clock();
