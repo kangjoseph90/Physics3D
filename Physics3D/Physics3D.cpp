@@ -5,6 +5,7 @@
 #include <ctime>
 #include <windows.h>
 
+#define min(x,y) (x<y?x:y)
 #define abs(x) (x>-x?x:-x)
 
 using namespace std;
@@ -14,7 +15,7 @@ class ball;
 class physics;
 class display;
 
-char pixel[10] = { ' ','.','-',':','=','+','*','%','#','@' }; //픽셀로 사용될 ASCII 문자 (밝기 낮은순)
+char pixel[10] = { ' ','.',':','-','*','=','+','%','#','@' }; //픽셀로 사용될 ASCII 문자 (밝기 낮은순)
 
 class vec3 {
 
@@ -248,6 +249,12 @@ public:
 						if (t <= 0) continue;
 						if (!model->lim.includes(camera + sight * (t - 1e-2))) continue;
 						int brightness = (int)abs(4*(wall[k].orthogonal^sight) / (wall[k].orthogonal.norm() * sight.norm())); //시선과 벽면이 만나는 점에서의 밝기
+						for (auto& ball : this->model->balls) {
+							if ((camera + sight * t - ball.centor).norm() < ball.radius * 2) {
+								brightness *= 2;
+								brightness = min(brightness, 9);
+							}
+						}
 						proj_plane[i][j] = pixel[brightness];
 						break;
 					}
@@ -325,10 +332,8 @@ int main() {
 
 	model.add_ball({ -3,-3,50 }, 30, 2); //오브젝트 추가
 	model.add_ball({ 1,5,17 }, 25, 1);
-	model.add_ball({ -30,50,60 }, 40, 3);
-	model.add_ball({ -50,30,49 }, 30, 2);
-	model.add_ball({ -70,20,-40 }, 40, 3);
-	model.add_ball({ 100,-55,-30 }, 60, 5);
+	model.add_ball({ -30,50,60 }, 50, 4);
+
 	while (true) {
 
 		clock_t start = clock();
