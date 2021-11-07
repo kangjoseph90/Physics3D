@@ -5,8 +5,9 @@
 #include <ctime>
 #include <windows.h>
 
-#define min(x,y) (x<y?x:y)
-#define abs(x) (x>-x?x:-x)
+#define min(x,y) ((x)<(y)?(x):(y))
+#define max(x,y) ((x)>(y)?(x):(y))
+#define abs(x) ((x)>-(x)?(x):-(x))
 
 using namespace std;
 
@@ -15,7 +16,7 @@ class ball;
 class physics;
 class display;
 
-char pixel[10] = { ' ','.',':','-','*','=','+','%','#','@' }; //픽셀로 사용될 ASCII 문자 (밝기 낮은순)
+char pixel[10] = { ' ','.',':','-','+','*','=','%','#','@' }; //픽셀로 사용될 ASCII 문자 (밝기 낮은순)
 
 class vec3 {
 
@@ -53,8 +54,8 @@ public:
 		return (*this) * size / this->norm();
 	}
 
-	bool includes(vec3 op) { //op가 this로 bound되어 있는지 확인
-		if (abs(op.x) < x && abs(op.y) < y && abs(op.z) < z) return true;
+	bool bounded(vec3 op) { //this가 op로 bound되어 있는지 확인
+		if (op.x > abs(x) && op.y > abs(y) && op.z > abs(z)) return true;
 		return false;
 	}
 
@@ -138,7 +139,7 @@ class physics {
 public:
 
 	list<ball> balls; //오브젝트 리스트
-	vec3 lim = { 200,200,200 }; //-200<x<200, -200<y<200, -200<z<200
+	vec3 lim = { 400,400,400 }; //-200<x<200, -200<y<200, -200<z<200
 	double gravity = -100; 
 	double delta_t = 1; //프레임 당 진행시킬 시간
 
@@ -177,8 +178,8 @@ private:
 	vec3 camera = {180,0,100}, gaze = { -100,0,-30 }; //시점의 위치, 시선의 방향 (var)
 	double L = 30; //시점과 투영면의 거리 (const)
 
-	double speed = 5; //시점 이동속도
-	double sensitivity = 3e-2; //시선 회전 감도
+	double speed = 7; //시점 이동속도
+	double sensitivity = 4e-2; //시선 회전 감도
 
 	struct plane { 
 		vec3 orthogonal, p0;
@@ -205,8 +206,7 @@ public:
 
 	display(physics* in) {
 		model = in;
-		system(" mode  con lines=80   cols=120 ");
-		disable_cursor();
+		system(" mode  con lines=100   cols=150 ");
 		for (int i = 0; i < 60; i++)
 			for (int j = 0; j < 120; j++) changed[i][j] = true;
 		double lx = model->lim.x, ly = model->lim.y, lz = model->lim.z;
@@ -219,42 +219,41 @@ public:
 	}
 
 	void render() { //화면 렌더링
-		for (int i = 0; i < 60; i++) { 
+		for (int i = 0; i < 60; i++) {
 			for (int j = 0; j < 120; j++) { //픽셀당 처리
 				char last = proj_plane[i][j];
 				vec3 w = { gaze.y, -gaze.x, 0 };
 				vec3 h = { -gaze.x * gaze.z, -gaze.y * gaze.z,gaze.x * gaze.x + gaze.y * gaze.y };
-				vec3 sight = gaze.resize(L) + h.resize(29.5 - i) + w.resize((j - 59.5)/2);
-				
+				vec3 sight = gaze.resize(L) + h.resize(29.5 - i) + w.resize((j - 59.5) / 2);
+
 				bool on_ball = false; //시선이 오브젝트에 있는가?
 
 				double min_dis = 1e9; //시점과 오브젝트 중심의 거리가 짧을수록 시선과 먼저 만난다
 
 				for (auto& ball : this->model->balls) { //시선이 오브젝트와 만나는지 확인
 					if ((ball.centor - camera).norm() > min_dis) continue;
-					vec3 closest = (ball.centor - camera).proj(sight)-ball.centor+camera;
+					vec3 projected = (ball.centor - camera).proj(sight);
+					if ((projected ^ sight) < 0) continue;
+					vec3 closest = projected - ball.centor + camera;
 					double d = closest.norm();
 					if (d < ball.radius) {
 						min_dis = (ball.centor - camera).norm();
-						int brightness = (int)(10*sqrt(ball.radius * ball.radius - d * d) / ball.radius-0.5); //시선이 오브젝트와 만나는 점에서의 밝기
+						int brightness = (int)(10 * sqrt(ball.radius * ball.radius - d * d) / ball.radius - 0.5); //시선이 오브젝트와 만나는 점에서의 밝기
 						proj_plane[i][j] = pixel[brightness];
 						on_ball = true;
 					}
 				}
 
 				if (!on_ball) { //시선에 벽에 있음
-					for (int k = 0; k < 6; k++) { 
-						if (abs((wall[k].orthogonal^sight)) < 1e-2) continue; //시선이 벽에 평행인지 확인
-						double t = ((wall[k].p0^wall[k].orthogonal)-(camera^wall[k].orthogonal)) / (sight^wall[k].orthogonal);
+					for (int k = 0; k < 6; k++) {
+						if (abs(wall[k].orthogonal ^ sight) < 1e-2) continue; //시선이 벽에 평행인지 확인
+						double t = ((wall[k].p0 ^ wall[k].orthogonal) - (camera ^ wall[k].orthogonal)) / (sight ^ wall[k].orthogonal);
 						if (t <= 0) continue;
-						if (!model->lim.includes(camera + sight * (t - 1e-2))) continue;
-						int brightness = (int)abs(4*(wall[k].orthogonal^sight) / (wall[k].orthogonal.norm() * sight.norm())); //시선과 벽면이 만나는 점에서의 밝기
-						for (auto& ball : this->model->balls) {
-							if ((camera + sight * t - ball.centor).norm() < ball.radius * 2) {
-								brightness *= 2;
-								brightness = min(brightness, 9);
-							}
-						}
+						if (!(camera + sight * (t - 1e-2)).bounded(model->lim)) continue;
+						int brightness = (int)abs(4 * (wall[k].orthogonal ^ sight) / (wall[k].orthogonal.norm() * sight.norm())); //시선과 벽면이 만나는 점에서의 밝기
+						for (auto& ball : this->model->balls)
+							if ((camera + sight * t - ball.centor).norm() < ball.radius * 2)
+								brightness = min(brightness + 1, 9);
 						proj_plane[i][j] = pixel[brightness];
 						break;
 					}
@@ -266,11 +265,12 @@ public:
 	}
 
 	void show() { //변화가 있었던 픽셀만 다시 출력
+		disable_cursor();
 		for (int i = 0; i < 60; i++) {
 			for (int j = 0; j < 120; j++) {
 				if (!changed[i][j]) continue;
 				gotoxy(j, i);
-				fprintf(stdout,"%c", proj_plane[i][j]);
+				_fputchar(proj_plane[i][j]);
 				changed[i][j] = false;
 			}
 		}
@@ -281,12 +281,12 @@ public:
 		SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos); 
 	}
 
-	void disable_cursor() //커서 숨기기
+	void disable_cursor() //커서 숨김
 	{
-		CONSOLE_CURSOR_INFO cursorInfo = { 0, };
-		cursorInfo.dwSize = 1; 
-		cursorInfo.bVisible = FALSE;
-		SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+		CONSOLE_CURSOR_INFO info;
+		info.dwSize = 100;
+		info.bVisible = false;
+		SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info);
 	}
 
 	void move_camera() { // W A S D Shift Space 시점 이동
@@ -295,7 +295,7 @@ public:
 		vec3 u = { 0,0,1 };
 		for (auto& key_data : camera_key) {
 			if (GetAsyncKeyState(key_data.key_type)) {
-				if (model->lim.includes(camera + r.resize(key_data.dir.x) + f.resize(key_data.dir.y) + u.resize(key_data.dir.z)))
+				if ((camera + r.resize(key_data.dir.x) + f.resize(key_data.dir.y) + u.resize(key_data.dir.z)).bounded(model->lim))
 					camera += r.resize(key_data.dir.x) + f.resize(key_data.dir.y) + u.resize(key_data.dir.z);
 			}
 		}
@@ -327,13 +327,13 @@ int main() {
 	physics model;
 	display screen(&model);
 
-	double framerate = 60;
+	double framerate = 100;
 	model.set_delta_t(1 / framerate);
 
-	model.add_ball({ -3,-3,50 }, 30, 2); //오브젝트 추가
-	model.add_ball({ 1,5,17 }, 25, 1);
-	model.add_ball({ -30,50,60 }, 50, 4);
-
+	model.add_ball({ -3,-3,50 }, 50, 2); //오브젝트 추가
+	model.add_ball({ 1,5,17 }, 40, 1);
+	model.add_ball({ -30,50,60 }, 70, 4);
+	
 	while (true) {
 
 		clock_t start = clock();
